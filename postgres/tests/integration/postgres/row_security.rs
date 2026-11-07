@@ -244,7 +244,9 @@ fn subqueries_ctes_and_views_see_no_hidden_rows() {
     conn.execute("GRANT SELECT ON notes TO alice").unwrap();
     conn.execute("CREATE VIEW document_ids AS SELECT id FROM documents")
         .unwrap();
-    conn.execute("GRANT SELECT ON document_ids TO alice")
+    // A view reads its tables as its owner, so alice must own it for the
+    // view to hide the rows.
+    conn.execute("ALTER VIEW document_ids OWNER TO alice")
         .unwrap();
 
     conn.execute("SET ROLE alice").unwrap();

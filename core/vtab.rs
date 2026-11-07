@@ -632,10 +632,9 @@ pub trait InternalVirtualTable: std::fmt::Debug + Send + Sync {
     ) -> Result<turso_ext::IndexInfo, ResultCode>;
     fn sql(&self) -> String;
     /// Whether the table shows the database file itself, and with it the rows
-    /// of every table.
-    fn reads_raw_storage(&self) -> bool {
-        false
-    }
+    /// of every table. Only a superuser may read such a table, because it
+    /// would show the rows that row-level security hides.
+    fn reads_raw_storage(&self) -> bool;
 }
 
 pub trait InternalVirtualTableCursor: Send + Sync {
@@ -671,6 +670,9 @@ mod tests {
         }
         fn sql(&self) -> String {
             format!("CREATE TABLE {}(key TEXT, value INTEGER)", self.name)
+        }
+        fn reads_raw_storage(&self) -> bool {
+            false
         }
         fn open(
             &self,

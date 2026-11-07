@@ -25,6 +25,7 @@ use crate::{
     translate::{
         emitter::Resolver,
         plan::{JoinOrigin, TableReferences, WhereTerm, WhereTermOrigin},
+        roles,
         schema::emit_schema_cookie,
     },
     vdbe::builder::ProgramBuilder,
@@ -90,18 +91,13 @@ pub(crate) fn check_insert(
 
 /// Checks that the role may read the virtual table. A virtual table that
 /// shows the database file would show the rows that row-level security
-/// hides, so only a superuser may read it.
+/// hides, so only a superuser may read it, like a PRAGMA.
 pub(crate) fn check_virtual_table(table: &VirtualTable, resolver: &Resolver) -> Result<()> {
     let reads_raw_storage = matches!(
         &table.vtab_type,
         VirtualTableType::Internal(internal) if internal.read().reads_raw_storage()
     );
-    if reads_raw_storage
-        && !resolver
-            .schema()
-            .roles
-            .is_superuser(resolver.row_security_role)
-    {
+    if reads_raw_storage && resolver.role_is_not_superuser {
         return Err(LimboError::PermissionDenied(Box::new(
             PermissionDenied::privilege(Action::Read, Object::Table(table.name.clone())),
         )));
@@ -143,10 +139,11 @@ pub(crate) fn check_blob_open(
 }
 
 /// Which rows of table `table_name` of `namespace` the role may access for
-/// `command`. Whether the table has row-level security is a question for the
-/// table's own database, so a table of an attached database with row-level
-/// security is limited too. The roles are those of the main database, which
-/// the role was set from.
+/// `command`. Inside a view, the view's owner reads the table, as for
+/// privileges. Whether the table has row-level security is a question for
+/// the table's own database, so a table of an attached database with
+/// row-level security is limited too. The roles are those of the main
+/// database, which the role was set from.
 fn policy(
     resolver: &Resolver,
     namespace: NamespaceRef,
@@ -154,12 +151,19 @@ fn policy(
     command: Command,
 ) -> Policy {
     let roles = resolver.schema().roles.clone();
+    // A statement the engine compiles as the superuser stays unlimited
+    // inside a view.
+    let role = if roles.is_superuser(resolver.row_security_role) {
+        resolver.row_security_role
+    } else {
+        roles::table_reader(resolver, resolver.row_security_role)
+    };
     resolver.with_schema(namespace.database_id, |schema| {
         policy_for(
             resolver.catalog.dialect.as_ref(),
             &roles,
             schema,
-            resolver.row_security_role,
+            role,
             namespace.id,
             table_name,
             command,

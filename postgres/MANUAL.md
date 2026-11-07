@@ -34,9 +34,11 @@ Policies and `CREATE POLICY` are not supported yet, so a role that is neither
 a superuser nor the table's owner cannot see any row of a table with row-level
 security.
 
-A view reads its tables as the role that runs the query, like a PostgreSQL view
-with `security_invoker`, so a view of a table with row-level security shows no
-rows to a role either.
+A view reads its tables as the view's owner, as in PostgreSQL, so it shows its
+readers the rows its owner sees. A view that a superuser or the table's owner
+owns shows every row; a view that another role owns shows none. Unlike
+PostgreSQL, a superuser reading a view sees every row, whoever owns the
+view.
 
 A query of a role that joins a table with row-level security with `RIGHT JOIN`
 or `FULL JOIN` fails. Virtual tables that show the database file itself can

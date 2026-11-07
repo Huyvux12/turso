@@ -180,6 +180,10 @@ impl InternalVirtualTable for JsonVirtualTable {
         );"
         .to_owned()
     }
+
+    fn reads_raw_storage(&self) -> bool {
+        false
+    }
 }
 
 impl std::fmt::Debug for JsonVirtualTable {

@@ -8,10 +8,9 @@
 # PostgreSQL refuses to read the table at all. PostgreSQL roles belong to the
 # whole server, so every test uses its own role and table names.
 #
-# Views are not tested: a PostgreSQL view reads its tables as the view's
-# owner, which bypasses row-level security, while Turso reads them as the
-# role that runs the query. RIGHT and FULL JOIN are not tested either,
-# because Turso rejects them for a role on a table with row-level security.
+# A view reads its tables as the view's owner, so a view shows its readers
+# the rows its owner sees. RIGHT and FULL JOIN are not tested, because Turso
+# rejects them for a role on a table with row-level security.
 
 @database :memory:
 
@@ -1016,5 +1015,39 @@ test former-owner-reads-no-rows {
 }
 expect {
     3
+    0
+}
+
+test view-owned-by-superuser-shows-every-row {
+    CREATE ROLE ra_role_61;
+    CREATE TABLE ra_docs_61 (id INT PRIMARY KEY, owner TEXT, title TEXT);
+    INSERT INTO ra_docs_61 VALUES (1, 'alice', 'a'), (2, 'bob', 'b'), (3, 'alice', 'c');
+    ALTER TABLE ra_docs_61 ENABLE ROW LEVEL SECURITY;
+    CREATE VIEW ra_view_61 AS SELECT id FROM ra_docs_61;
+    GRANT SELECT ON ra_view_61 TO ra_role_61;
+    GRANT SELECT ON ra_docs_61 TO ra_role_61;
+    SET ROLE ra_role_61;
+    SELECT count(*) FROM ra_view_61;
+    SELECT count(*) FROM ra_docs_61;
+}
+expect {
+    3
+    0
+}
+
+test view-owned-by-role-shows-no-rows {
+    CREATE ROLE ra_view_owner_62;
+    CREATE ROLE ra_role_62;
+    CREATE TABLE ra_docs_62 (id INT PRIMARY KEY, owner TEXT, title TEXT);
+    INSERT INTO ra_docs_62 VALUES (1, 'alice', 'a'), (2, 'bob', 'b'), (3, 'alice', 'c');
+    ALTER TABLE ra_docs_62 ENABLE ROW LEVEL SECURITY;
+    CREATE VIEW ra_view_62 AS SELECT id FROM ra_docs_62;
+    ALTER VIEW ra_view_62 OWNER TO ra_view_owner_62;
+    GRANT SELECT ON ra_docs_62 TO ra_view_owner_62;
+    GRANT SELECT ON ra_view_62 TO ra_role_62;
+    SET ROLE ra_role_62;
+    SELECT count(*) FROM ra_view_62;
+}
+expect {
     0
 }
